@@ -2,6 +2,12 @@ name: Build VSIX
 
 on:
   workflow_dispatch:
+    inputs:
+      use_codex:
+        description: "Run optional Codex-assisted troubleshooting/build job (requires OPENAI_API_KEY)"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -11,6 +17,7 @@ permissions:
 
 jobs:
   build:
+    name: Build VSIX (no API credits required)
     runs-on: ubuntu-latest
 
     steps:
@@ -34,8 +41,82 @@ jobs:
       - name: Build extension
         run: npm run build --if-present
 
-      - name: Package VSIX
-        run: npx @vscode/vsce package
+      - name: Package VSIX (with fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if npx --yes @vscode/vsce package; then
+            echo "Packaged with @vscode/vsce"
+            exit 0
+          fi
+
+          echo "vsce packaging failed; falling back to manual VSIX assembly"
+
+          EXT_NAME="$(node -p "require('./package.json').name")"
+          EXT_VERSION="$(node -p "require('./package.json').version")"
+          EXT_DISPLAY_NAME="$(node -p "require('./package.json').displayName || require('./package.json').name")"
+          EXT_DESCRIPTION="$(node -p "require('./package.json').description || ''")"
+          EXT_PUBLISHER="$(node -p "require('./package.json').publisher")"
+          EXT_ENGINE="$(node -p "(require('./package.json').engines && require('./package.json').engines.vscode) || '^1.85.0'")"
+
+          VSIX_FILE="${EXT_NAME}-${EXT_VERSION}.vsix"
+          BUILD_DIR=".vsix-build"
+          EXT_DIR="${BUILD_DIR}/extension"
+
+          rm -rf "${BUILD_DIR}" "${VSIX_FILE}"
+          mkdir -p "${EXT_DIR}"
+
+          cp package.json "${EXT_DIR}/package.json"
+          [ -f README.md ] && cp README.md "${EXT_DIR}/README.md"
+          [ -f LICENSE ] && cp LICENSE "${EXT_DIR}/LICENSE"
+          [ -d out ] && cp -R out "${EXT_DIR}/out"
+
+          cat > "${BUILD_DIR}/extension.vsixmanifest" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <Identity Language="en-US" Id="${EXT_PUBLISHER}.${EXT_NAME}" Version="${EXT_VERSION}" Publisher="${EXT_PUBLISHER}" />
+    <DisplayName>${EXT_DISPLAY_NAME}</DisplayName>
+    <Description xml:space="preserve">${EXT_DESCRIPTION}</Description>
+    <Tags>vscode,extension</Tags>
+    <Categories>Other</Categories>
+    <GalleryFlags>Public</GalleryFlags>
+    <Properties>
+      <Property Id="Microsoft.VisualStudio.Code.Engine" Value="${EXT_ENGINE}" />
+    </Properties>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Code" />
+  </Installation>
+  <Dependencies/>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true" />
+    <Asset Type="Microsoft.VisualStudio.Services.Content.License" Path="extension/LICENSE" Addressable="true" />
+  </Assets>
+</PackageManifest>
+XML
+
+          cat > "${BUILD_DIR}/[Content_Types].xml" <<'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="json" ContentType="application/json" />
+  <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="js" ContentType="application/javascript" />
+  <Default Extension="txt" ContentType="text/plain" />
+  <Default Extension="xml" ContentType="text/xml" />
+  <Default Extension="vsixmanifest" ContentType="text/xml" />
+</Types>
+XML
+
+          (
+            cd "${BUILD_DIR}"
+            zip -qr "../${VSIX_FILE}" .
+          )
+
+          rm -rf "${BUILD_DIR}"
+          echo "Created fallback VSIX: ${VSIX_FILE}"
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
@@ -43,3 +124,25 @@ jobs:
           name: vsix-package
           path: "*.vsix"
           if-no-files-found: error
+
+  codex-job:
+    name: Optional Codex-assisted run
+    runs-on: ubuntu-latest
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.use_codex == true &&
+      secrets.OPENAI_API_KEY != ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Codex Action
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-args: >-
+            --sandbox workspace-write
+            --full-auto
+            "Build this VS Code extension and print diagnostics if packaging fails."
