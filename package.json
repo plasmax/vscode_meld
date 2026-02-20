@@ -1,18 +1,114 @@
 {
   "name": "vscode-meld",
   "displayName": "VSCode Meld",
-  "description": "Meld-like directory comparison helpers for VS Code.",
+  "description": "Compare two directories, diff files, and copy left/right.",
   "version": "0.0.1",
   "publisher": "local",
   "license": "MIT",
+  "private": true,
+  "type": "module",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.92.0"
   },
   "categories": [
     "Other"
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "*"
-  ]
+    "onView:dirCompareView",
+    "onCommand:dirCompare.setLeft",
+    "onCommand:dirCompare.setRight",
+    "onCommand:dirCompare.refresh"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . -w"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dirCompare",
+          "title": "Dir Compare",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "dirCompare": [
+        {
+          "id": "dirCompareView",
+          "name": "Compare"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "dirCompare.setLeft",
+        "title": "Dir Compare: Set Left Folder"
+      },
+      {
+        "command": "dirCompare.setRight",
+        "title": "Dir Compare: Set Right Folder"
+      },
+      {
+        "command": "dirCompare.refresh",
+        "title": "Dir Compare: Refresh"
+      },
+      {
+        "command": "dirCompare.openDiff",
+        "title": "Dir Compare: Open Diff"
+      },
+      {
+        "command": "dirCompare.copyLeftToRight",
+        "title": "Dir Compare: Copy Left -> Right"
+      },
+      {
+        "command": "dirCompare.copyRightToLeft",
+        "title": "Dir Compare: Copy Right -> Left"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "dirCompare.setLeft",
+          "when": "view == dirCompareView",
+          "group": "navigation"
+        },
+        {
+          "command": "dirCompare.setRight",
+          "when": "view == dirCompareView",
+          "group": "navigation"
+        },
+        {
+          "command": "dirCompare.refresh",
+          "when": "view == dirCompareView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "dirCompare.openDiff",
+          "when": "view == dirCompareView && viewItem == dirCompareItem && dirCompareHasBoth == true",
+          "group": "navigation"
+        },
+        {
+          "command": "dirCompare.copyLeftToRight",
+          "when": "view == dirCompareView && viewItem == dirCompareItem && dirCompareHasLeft == true",
+          "group": "inline"
+        },
+        {
+          "command": "dirCompare.copyRightToLeft",
+          "when": "view == dirCompareView && viewItem == dirCompareItem && dirCompareHasRight == true",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.92.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
 }
