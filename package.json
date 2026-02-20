@@ -1,0 +1,18 @@
+{
+  "name": "vscode-meld",
+  "displayName": "VSCode Meld",
+  "description": "Meld-like directory comparison helpers for VS Code.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "*"
+  ]
+}
